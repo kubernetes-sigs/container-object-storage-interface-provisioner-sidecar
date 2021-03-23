@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-CMDS=objectstorage-sidecar sample-driver
+CMDS=objectstorage-sidecar objectstorage-sample-driver
 
 all: reltools build
 .PHONY: reltools

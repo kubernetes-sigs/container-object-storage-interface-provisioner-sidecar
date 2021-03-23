@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Kubernetes Authors.
+Copyright 2021 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -29,6 +29,7 @@ import (
 	"github.com/minio/minio/pkg/madmin"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
 	"k8s.io/klog/v2"
 
 	"sigs.k8s.io/container-object-storage-interface-provisioner-sidecar/pkg/grpcserver"
@@ -36,15 +37,15 @@ import (
 
 var (
 	cosiAddress = "tcp://0.0.0.0:9000"
-	s3Endpoint  = "tcp://0.0.0.0:9000"
-	accessKey   = "AKIAIOSFODNN7EXAMPLE"
-	secretKey   = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+	endpoint    = "http://0.0.0.0:9000"
+	accessKey   = ""
+	secretKey   = ""
 	ctx         context.Context
 )
 
 var cmd = &cobra.Command{
 	Use:           os.Args[0],
-	Short:         "sample provisoner for provisioning bucket instance to the backend bucket",
+	Short:         "Sample provisioner for provisioning bucket instance to the backend bucket",
 	SilenceErrors: true,
 	SilenceUsage:  true,
 	RunE: func(c *cobra.Command, args []string) error {
@@ -65,7 +66,7 @@ func init() {
 			StringVarP(ptr, name, short, dfault, desc)
 	}
 	strFlag(cmd, &cosiAddress, "listen-address", "", cosiAddress, "The address for the driver to listen on")
-	strFlag(cmd, &s3Endpoint, "s3-endpoint", "", "", "S3-endpont")
+	strFlag(cmd, &endpoint, "s3-endpoint", "", "", "S3-endpont")
 	strFlag(cmd, &accessKey, "access-key", "", "", "S3-AccessKey")
 	strFlag(cmd, &secretKey, "secret-key", "", "", "S3-SecretKey")
 	hideFlag := func(name string) {
@@ -95,31 +96,52 @@ func init() {
 
 	go func() {
 		s := <-sigs
+		klog.InfoS("Received OS signal", "signal", s.String())
 		cancel()
-		klog.Error(fmt.Sprintf("%s %s", s.String(), "Signal received. Exiting"))
 	}()
 
 }
 
 func main() {
 	if err := cmd.Execute(); err != nil {
-		klog.Fatal(err.Error())
+		klog.Fatalln(err)
 
 	}
 }
 
 func run(args []string, endpoint string) error {
-	// Initialize minio client object.
-	minioClient, err := minio.New(s3Endpoint, accessKey, secretKey, false)
+
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		klog.Fatalf("Missing protocol (HTTP/HTTPS) in the endpoint", err.Error())
+	}
+
+	secure := u.Scheme == "https"
+
+	klog.V(4).InfoS("Endpoint details", "host", u.Host, "secure", secure)
+
+	minioClient, err := minio.New(u.Host, accessKey, secretKey, secure)
 	if err != nil {
 		klog.Fatalln(err)
 	}
-	minioAdminClient, err := madmin.New(s3Endpoint, accessKey, secretKey, false)
+
+	minioAdminClient, err := madmin.New(u.Host, accessKey, secretKey, secure)
 	if err != nil {
 		klog.Fatalln(err)
 	}
-	cds := DriverServer{S3Client: minioClient, S3AdminClient: minioAdminClient}
-	ids := IdentityServer{Name: PROVISIONER_NAME, Version: VERSION}
+
+	cds := DriverServer{
+		Name:             PROVISIONER_NAME,
+		Version:          VERSION,
+		MinioClient:      minioClient,
+		MinioAdminClient: minioAdminClient,
+	}
+
+	ids := IdentityServer{
+		Name:    PROVISIONER_NAME,
+		Version: VERSION,
+	}
+
 	s := grpcserver.NewNonBlockingGRPCServer()
 	s.Start(endpoint, &cds, &ids)
 	s.Wait()

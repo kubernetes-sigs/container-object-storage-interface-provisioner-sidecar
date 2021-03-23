@@ -28,24 +28,19 @@ import (
 	cosi "sigs.k8s.io/container-object-storage-interface-spec"
 )
 
-var (
-	PROVISIONER_NAME = "sample-provisioner.objectstorage.k8s.io"
-	VERSION          = "dev"
-)
-
 type IdentityServer struct {
-	Name, Version string
-	S3Client      *minio.Client
-	S3AdminClient *madmin.AdminClient
+	Name, Version    string
+	MinioClient      *minio.Client
+	MinioAdminClient *madmin.AdminClient
 }
 
 func (id *IdentityServer) ProvisionerGetInfo(context.Context, *cosi.ProvisionerGetInfoRequest) (*cosi.ProvisionerGetInfoResponse, error) {
 	if id.Name == "" {
-		return nil, status.Error(codes.Unavailable, "Driver name not configured")
+		return nil, status.Error(codes.Unavailable, ERR_DRIVER_NO_NAME_DEFINED)
 	}
 
 	if id.Version == "" {
-		return nil, status.Error(codes.Unavailable, "Driver is missing version")
+		return nil, status.Error(codes.Unavailable, ERR_DRIVER_NO_VERSION_DEFINED)
 	}
 	rsp := &cosi.ProvisionerGetInfoResponse{}
 	rsp.Name = fmt.Sprintf("%s-%s", id.Name, id.Version)
