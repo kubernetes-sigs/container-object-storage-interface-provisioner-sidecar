@@ -22,16 +22,22 @@ import (
 
 	min "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/minio/minio/pkg/madmin"
 
 	"k8s.io/klog/v2"
 )
+
+type MinioClients struct {
+	client *min.Client
+	adminClient *madmin.AdminClient
+}
 
 type C struct {
 	accessKey string
 	secretKey string
 	host      *url.URL
 
-	client *min.Client
+	minioClients MinioClients
 }
 
 func NewClient(ctx context.Context, minioHost, accessKey, secretKey string) (*C, error) {
@@ -52,23 +58,26 @@ func NewClient(ctx context.Context, minioHost, accessKey, secretKey string) (*C,
 		return nil, errors.New("invalid url scheme for minio endpoint")
 	}
 
-	clChan := make(chan *min.Client)
+	clChan := make(chan MinioClients)
 	errChan := make(chan error)
 	go func() {
 		klog.V(3).InfoS("Connecting to MinIO", "endpoint", host.Host)
 
-		cl, err := min.New(host.Host, &min.Options{
+		client, err := min.New(host.Host, &min.Options{
 			Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 			Secure: secure,
 		})
 		if err != nil {
 			errChan <- err
 		}
-		_, err = cl.BucketExists(ctx, uuid.New().String())
+		_, err = client.BucketExists(ctx, uuid.New().String())
 		if err != nil {
 			if errResp, ok := err.(min.ErrorResponse); ok {
 				if errResp.Code == "NoSuchBucket" {
-					clChan <- cl
+					clChan <- MinioClients{
+						client:      client,
+						adminClient: nil,
+					}
 					return
 				}
 				if errResp.StatusCode == 403 {
@@ -80,8 +89,18 @@ func NewClient(ctx context.Context, minioHost, accessKey, secretKey string) (*C,
 			return
 		}
 
-		clChan <- cl
 		klog.InfoS("Successfully connected to MinIO")
+
+		adminClient, err := madmin.New(host.Host, accessKey, secretKey, secure)
+		if err != nil {
+			errChan <- errors.Wrap(err, "Connection to MinIO as admin Failed")
+			return
+		}
+		klog.InfoS("Successfully connected to MinIO")
+		clChan <- MinioClients{
+			client:      client,
+			adminClient: adminClient,
+		}
 	}()
 
 	select {
@@ -93,7 +112,7 @@ func NewClient(ctx context.Context, minioHost, accessKey, secretKey string) (*C,
 			secretKey: secretKey,
 			host:      host,
 
-			client: cl,
+			minioClients: cl,
 		}, nil
 	case err := <-errChan:
 		return nil, err

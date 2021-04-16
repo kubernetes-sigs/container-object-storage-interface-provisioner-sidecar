@@ -15,7 +15,7 @@ package internal
 
 import (
 	"context"
-
+	"fmt"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/container-object-storage-interface-provisioner-sidecar/cmd/minio-cosi-driver/internal/minio"
 	cosi "sigs.k8s.io/container-object-storage-interface-spec"
@@ -111,7 +111,16 @@ func (s *ProvisionerServer) ProvisionerDeleteBucket(ctx context.Context,
 func (s *ProvisionerServer) ProvisionerGrantBucketAccess(ctx context.Context,
 	req *cosi.ProvisionerGrantBucketAccessRequest) (*cosi.ProvisionerGrantBucketAccessResponse, error) {
 
-	return &cosi.ProvisionerGrantBucketAccessResponse{}, nil
+	//TODO bucketID? how do we get the name
+    creds, err := s.mc.AddUser(ctx, req.GetBucketId())
+    if (err!=nil){
+    	return nil, err
+	}
+
+	return &cosi.ProvisionerGrantBucketAccessResponse{
+		CredentialsFileContents: fmt.Sprintf("[default]\naws_access_key %s\naws_secret_key %s", creds.AccessKey, creds.SecretKey),
+		CredentialsFilePath:     ".aws/credentials",
+	}, nil
 }
 
 func (s *ProvisionerServer) ProvisionerRevokeBucketAccess(ctx context.Context,
