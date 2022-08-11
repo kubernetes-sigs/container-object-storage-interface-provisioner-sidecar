@@ -42,7 +42,7 @@ const (
 // BucketListener manages Bucket objects
 type BucketListener struct {
 	provisionerClient cosi.ProvisionerClient
-	driverName   string
+	driverName        string
 
 	kubeClient   kube.Interface
 	bucketClient buckets.Interface
