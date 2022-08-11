@@ -24,9 +24,10 @@ import (
 	kube "k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 
-	"sigs.k8s.io/container-object-storage-interface-api/apis/objectstorage.k8s.io/v1alpha1"
-	buckets "sigs.k8s.io/container-object-storage-interface-api/clientset"
-	bucketapi "sigs.k8s.io/container-object-storage-interface-api/clientset/typed/objectstorage.k8s.io/v1alpha1"
+	"sigs.k8s.io/container-object-storage-interface-api/apis/objectstorage/v1alpha1"
+	buckets "sigs.k8s.io/container-object-storage-interface-api/client/clientset/versioned"
+	bucketapi "sigs.k8s.io/container-object-storage-interface-api/client/clientset/versioned/typed/objectstorage/v1alpha1"
+	"sigs.k8s.io/container-object-storage-interface-provisioner-sidecar/pkg/consts"
 	cosi "sigs.k8s.io/container-object-storage-interface-spec"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
