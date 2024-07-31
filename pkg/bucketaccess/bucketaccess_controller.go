@@ -315,6 +315,12 @@ func (bal *BucketAccessListener) Update(ctx context.Context, old, new *v1alpha1.
 		if err != nil {
 			return bal.recordError(bucketAccess, v1.EventTypeWarning, events.FailedRevokeAccess, err)
 		}
+	} else {
+		// Trigger the Add logic to ensure that the BucketAccess is properly reconciled
+		err := bal.Add(ctx, bucketAccess)
+		if err != nil {
+			return bal.recordError(bucketAccess, v1.EventTypeWarning, events.FailedGrantAccess, err)
+		}
 	}
 
 	klog.V(3).InfoS("Update BucketAccess success",
