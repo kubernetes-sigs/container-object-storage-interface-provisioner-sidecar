@@ -97,8 +97,36 @@ func (b *BucketListener) Add(ctx context.Context, inputBucket *v1alpha1.Bucket) 
 	var bucketID string
 
 	if bucket.Spec.ExistingBucketID != "" {
-		bucketReady = true
-		bucketID = bucket.Spec.ExistingBucketID
+		//如果bucket
+		req := &cosi.DriverCreateBucketRequest{
+			Parameters: bucket.Spec.Parameters,
+			Name:       bucket.ObjectMeta.Name,
+		}
+
+		rsp, err := b.provisionerClient.DriverCreateBucket(ctx, req)
+		if err != nil {
+			if status.Code(err) != codes.PermissionDenied {
+				//events.FailedCreateBucket indicates that the corresponding bucket does not exist on the storage
+				return b.recordError(inputBucket, v1.EventTypeWarning, events.FailedCreateBucket, fmt.Errorf("failed to create bucket: %w", err))
+			}
+		}
+
+		if rsp == nil {
+			err = consts.ErrInternal
+			klog.V(3).ErrorS(err, "Internal Error from driver",
+				"bucket", bucket.ObjectMeta.Name)
+			return fmt.Errorf("%w for Bucket %v", err, bucket.Name)
+		}
+
+		if rsp.BucketId != "" {
+			bucketID = rsp.BucketId
+			bucketReady = true
+		} else {
+			klog.V(3).ErrorS(err, "DriverCreateBucket returned an empty bucketID",
+				"bucket", bucket.ObjectMeta.Name)
+			return fmt.Errorf("%w for Bucket %v", consts.ErrEmptyBucketID, bucket.Name)
+		}
+
 		if bucket.Spec.Parameters == nil {
 			bucketClass, err := b.bucketClasses().Get(ctx, bucket.Spec.BucketClassName, metav1.GetOptions{})
 			if kubeerrors.IsNotFound(err) {
