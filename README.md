@@ -1,3 +1,6 @@
+# MOVED: **This repo has been moved to https://github.com/kubernetes-sigs/container-object-storage-interface : see `sidecar` directory**
+
+
 # Container Object Storage Provisioner Sidecar
 
 Container Object Storage Interface (COSI) provisioner sidecar is responsible to manage lifecycle of COSI objects and is
