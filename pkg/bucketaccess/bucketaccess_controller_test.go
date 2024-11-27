@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+ // Copyright 2024 Hewlett Packard Enterprise Development LP.
+
 package bucketaccess
 
 import (
@@ -23,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agiledragon/gomonkey/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -497,6 +500,45 @@ func TestRecordEvents(t *testing.T) {
 				t.Errorf("no event after trigger")
 			}
 		})
+	}
+}
+
+func TestMissingBucketAccessClass(t *testing.T) {
+	driver := "driver1"
+	mpc := struct{ fakespec.FakeProvisionerClient }{}
+	mpc.FakeDriverRevokeBucketAccess = func(ctx context.Context,
+		in *cosi.DriverRevokeBucketAccessRequest,
+		opts ...grpc.CallOption) (*cosi.DriverRevokeBucketAccessResponse, error) {
+		t.Errorf("grpc client called")
+		return nil, nil
+	}
+
+	bl := BucketAccessListener{
+		driverName:        driver,
+		provisionerClient: &mpc,
+		bucketClient:      &fakebucketclientset.Clientset{},
+		kubeClient:        &fakekubeclientset.Clientset{},
+	}
+
+	new := v1alpha1.BucketAccess{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "testbucket_access",
+			DeletionTimestamp: &metav1.Time{Time: time.Now()},
+		},
+		Spec: v1alpha1.BucketAccessSpec{
+			BucketClaimName:       "testbucket_claim",
+			BucketAccessClassName: "testbucket_access_class",
+		},
+	}
+	e := fmt.Errorf("access class with name %s, not found", new.Spec.BucketAccessClassName)
+	m := gomonkey.ApplyMethodReturn(bl.bucketAccessClasses(), "Get", nil, e)
+	defer m.Reset()
+
+	ctx := context.TODO()
+	err := bl.Update(ctx, &new, &new)
+	expectedErr := errors.New("failed to fetch BucketAccessClass: " + e.Error())
+	if err == nil || err.Error() != expectedErr.Error() {
+		t.Errorf("expecter error: %+v \n returned error: %+v", expectedErr, err)
 	}
 }
 

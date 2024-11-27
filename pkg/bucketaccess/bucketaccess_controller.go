@@ -13,6 +13,8 @@
  * limitations under the License.
  */
 
+ // Copyright 2024 Hewlett Packard Enterprise Development LP.
+
 package bucketaccess
 
 import (
@@ -350,10 +352,18 @@ func (bal *BucketAccessListener) deleteBucketAccessOp(ctx context.Context, bucke
 		klog.V(3).ErrorS(err, "Failed to fetch bucket", "bucket", bucketClaim.Status.BucketName)
 		return fmt.Errorf("failed to fetch bucket: %w", err)
 	}
-
+	bucketAccessClassName := bucketAccess.Spec.BucketAccessClassName
+	bucketAccessClass, err := bal.bucketAccessClasses().Get(ctx, bucketAccessClassName, metav1.GetOptions{})
+	if kubeerrors.IsNotFound(err) {
+		return bal.recordError(bucketAccess, v1.EventTypeWarning, events.FailedGrantAccess, err)
+	} else if err != nil {
+		klog.V(3).ErrorS(err, "Failed to fetch bucketAccessClass", "bucketAccessClass", bucketAccessClassName)
+		return fmt.Errorf("failed to fetch BucketAccessClass: %w", err)
+	}
 	req := &cosi.DriverRevokeBucketAccessRequest{
-		BucketId:  bucket.Status.BucketID,
-		AccountId: bucketAccess.Status.AccountID,
+		BucketId:            bucket.Status.BucketID,
+		AccountId:           bucketAccess.Status.AccountID,
+		RevokeAccessContext: bucketAccessClass.Parameters,
 	}
 
 	// First we revoke the bucketAccess from the driver
